@@ -3,43 +3,38 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
 const app = express();
 
 // --- ENV CONFIG ---------------------------------------------------
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 8080;
 
+// Who receives the tickets
 const SUPPORT_EMAIL_TO = process.env.SUPPORT_EMAIL_TO;
-const SUPPORT_EMAIL_FROM = process.env.SUPPORT_EMAIL_FROM;
 
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_SECURE = process.env.SMTP_SECURE === "true";
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
+// From address used by Resend
+// For testing you can use: "Golpac IT <onboarding@resend.dev>"
+const SUPPORT_EMAIL_FROM =
+  process.env.SUPPORT_EMAIL_FROM || "Golpac IT <onboarding@resend.dev>";
 
-if (!SUPPORT_EMAIL_TO || !SUPPORT_EMAIL_FROM) {
+// Resend API key
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+
+if (!RESEND_API_KEY) {
   console.warn(
-    "⚠️ SUPPORT_EMAIL_TO or SUPPORT_EMAIL_FROM is not set in .env. Emails will likely fail."
+    "⚠️ RESEND_API_KEY is not set. Emails will not be sent until this is configured."
   );
 }
 
-// --- NODEMAILER TRANSPORT -----------------------------------------
+if (!SUPPORT_EMAIL_TO) {
+  console.warn(
+    "⚠️ SUPPORT_EMAIL_TO is not set. You won't receive support emails."
+  );
+}
 
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_SECURE,
-  auth:
-    SMTP_USER && SMTP_PASS
-      ? {
-          user: SMTP_USER,
-          pass: SMTP_PASS,
-        }
-      : undefined,
-});
+const resend = new Resend(RESEND_API_KEY);
 
 // --- HELPERS: TEMPLATES -------------------------------------------
 
@@ -127,7 +122,9 @@ function buildHtmlBody({
                       Golpac IT Support
                     </td>
                     <td align="right" style="font-size:12px;color:#e5e7eb;">
-                      App v${escapeHtml(resolvedVersion)} · ${escapeHtml(createdAt)}
+                      App v${escapeHtml(resolvedVersion)} · ${escapeHtml(
+    createdAt
+  )}
                     </td>
                   </tr>
                 </table>
@@ -196,11 +193,15 @@ function buildHtmlBody({
                 <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;">
                   <tr>
                     <td style="padding:4px 0;color:#6b7280;width:130px;">Computer name</td>
-                    <td style="padding:4px 0;">${escapeHtml(hostname || "Unknown")}</td>
+                    <td style="padding:4px 0;">${escapeHtml(
+                      hostname || "Unknown"
+                    )}</td>
                   </tr>
                   <tr>
                     <td style="padding:4px 0;color:#6b7280;">User</td>
-                    <td style="padding:4px 0;">${escapeHtml(username || "Unknown")}</td>
+                    <td style="padding:4px 0;">${escapeHtml(
+                      username || "Unknown"
+                    )}</td>
                   </tr>
                   <tr>
                     <td style="padding:4px 0;color:#6b7280;">OS</td>
@@ -208,7 +209,9 @@ function buildHtmlBody({
                   </tr>
                   <tr>
                     <td style="padding:4px 0;color:#6b7280;">IPv4</td>
-                    <td style="padding:4px 0;">${escapeHtml(ipv4 || "Unknown")}</td>
+                    <td style="padding:4px 0;">${escapeHtml(
+                      ipv4 || "Unknown"
+                    )}</td>
                   </tr>
                 </table>
 
@@ -256,6 +259,18 @@ app.post("/api/ticket", async (req, res) => {
         .json({ ok: false, error: "Missing subject or description" });
     }
 
+    if (!RESEND_API_KEY) {
+      return res
+        .status(500)
+        .json({ ok: false, error: "Email service not configured" });
+    }
+
+    if (!SUPPORT_EMAIL_TO) {
+      return res
+        .status(500)
+        .json({ ok: false, error: "Support email not configured" });
+    }
+
     const resolvedOs = osVersion || os_version || "Unknown OS";
     const resolvedUrgency = urgency || "Normal";
     const createdAt = timestamp || new Date().toISOString();
@@ -286,7 +301,7 @@ app.post("/api/ticket", async (req, res) => {
     const textBody = buildTextBody(templateData);
     const htmlBody = buildHtmlBody(templateData);
 
-    await transporter.sendMail({
+    const sendResult = await resend.emails.send({
       from: SUPPORT_EMAIL_FROM,
       to: SUPPORT_EMAIL_TO,
       subject: mailSubject,
@@ -294,7 +309,14 @@ app.post("/api/ticket", async (req, res) => {
       html: htmlBody,
     });
 
-    console.log("✅ Ticket email sent:", mailSubject);
+    if (sendResult.error) {
+      console.error("❌ Resend error:", sendResult.error);
+      return res
+        .status(500)
+        .json({ ok: false, error: "Failed to send email via Resend" });
+    }
+
+    console.log("✅ Ticket email sent via Resend:", mailSubject);
     res.json({ ok: true });
   } catch (err) {
     console.error("❌ Error sending ticket email:", err);
