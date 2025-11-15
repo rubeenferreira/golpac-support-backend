@@ -47,6 +47,8 @@ function buildTextBody({
   ipv4,
   userEmail,
   resolvedUrgency,
+  resolvedCategory,
+  printerInfo,
   resolvedVersion,
   createdAt,
 }) {
@@ -55,6 +57,7 @@ New IT support request from Golpac desktop app
 
 Subject: ${subject}
 Urgency: ${resolvedUrgency}
+Category: ${resolvedCategory}
 Requester email: ${userEmail || "Not provided"}
 
 Description:
@@ -67,6 +70,11 @@ Computer name: ${hostname || "Unknown"}
 User: ${username || "Unknown"}
 OS: ${resolvedOs}
 IPv4: ${ipv4 || "Unknown"}
+
+-----------------------------
+Category details
+-----------------------------
+Printer info: ${printerInfo || "N/A"}
 
 -----------------------------
 Meta
@@ -93,6 +101,8 @@ function buildHtmlBody({
   ipv4,
   userEmail,
   resolvedUrgency,
+  resolvedCategory,
+  printerInfo,
   resolvedVersion,
   createdAt,
 }) {
@@ -141,7 +151,7 @@ function buildHtmlBody({
                   ${escapeHtml(subject)}
                 </h2>
 
-                <div style="margin:0 0 16px;">
+                <div style="margin:0 0 10px;">
                   <span
                     style="
                       display:inline-block;
@@ -153,9 +163,25 @@ function buildHtmlBody({
                       text-transform:uppercase;
                       color:#ffffff;
                       background:${urgencyColor};
+                      margin-right:8px;
                     "
                   >
                     ${escapeHtml(resolvedUrgency)}
+                  </span>
+                  <span
+                    style="
+                      display:inline-block;
+                      padding:2px 10px;
+                      border-radius:999px;
+                      font-size:11px;
+                      font-weight:600;
+                      letter-spacing:0.03em;
+                      text-transform:uppercase;
+                      color:#111827;
+                      background:#e5e7eb;
+                    "
+                  >
+                    ${escapeHtml(resolvedCategory)}
                   </span>
                 </div>
 
@@ -215,6 +241,22 @@ function buildHtmlBody({
                   </tr>
                 </table>
 
+                <h3 style="margin:18px 0 6px;font-size:14px;color:#111827;">Category details</h3>
+                <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;">
+                  <tr>
+                    <td style="padding:4px 0;color:#6b7280;width:130px;">Category</td>
+                    <td style="padding:4px 0;">${escapeHtml(
+                      resolvedCategory
+                    )}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#6b7280;">Printer info</td>
+                    <td style="padding:4px 0;">${escapeHtml(
+                      printerInfo || "N/A"
+                    )}</td>
+                  </tr>
+                </table>
+
                 <p style="margin:18px 0 0;font-size:11px;color:#9ca3af;">
                   This email was generated automatically by the Golpac IT Support desktop app.
                 </p>
@@ -247,6 +289,8 @@ app.post("/api/ticket", async (req, res) => {
       ipv4,
       userEmail,
       urgency,
+      category,
+      printerInfo,
       appVersion,
       timestamp,
     } = req.body;
@@ -273,15 +317,22 @@ app.post("/api/ticket", async (req, res) => {
 
     const resolvedOs = osVersion || os_version || "Unknown OS";
     const resolvedUrgency = urgency || "Normal";
+    const resolvedCategory = category || "General";
     const createdAt = timestamp || new Date().toISOString();
     const resolvedVersion = appVersion || "unknown";
+    const safePrinterInfo = printerInfo || "";
 
     const urgencyTag =
       resolvedUrgency && resolvedUrgency !== "Normal"
         ? `[${resolvedUrgency}] `
         : "";
 
-    const mailSubject = `[IT Support] ${urgencyTag}${subject} - ${
+    const categoryTag =
+      resolvedCategory && resolvedCategory !== "General"
+        ? `[${resolvedCategory}] `
+        : "";
+
+    const mailSubject = `[IT Support] ${urgencyTag}${categoryTag}${subject} - ${
       hostname || "Unknown host"
     }`;
 
@@ -294,6 +345,8 @@ app.post("/api/ticket", async (req, res) => {
       ipv4,
       userEmail,
       resolvedUrgency,
+      resolvedCategory,
+      printerInfo: safePrinterInfo,
       resolvedVersion,
       createdAt,
     };
