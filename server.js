@@ -51,6 +51,7 @@ function buildTextBody({
   printerInfo,
   resolvedVersion,
   createdAt,
+  hasScreenshot,
 }) {
   return `
 New IT support request from Golpac desktop app
@@ -75,6 +76,8 @@ IPv4: ${ipv4 || "Unknown"}
 Category details
 -----------------------------
 Printer info: ${printerInfo || "N/A"}
+
+Screenshot: ${hasScreenshot ? "Included" : "No screenshot"}
 
 -----------------------------
 Meta
@@ -105,6 +108,7 @@ function buildHtmlBody({
   printerInfo,
   resolvedVersion,
   createdAt,
+  screenshotBase64,
 }) {
   const urgencyColor =
     resolvedUrgency === "High"
@@ -112,6 +116,26 @@ function buildHtmlBody({
       : resolvedUrgency === "Low"
       ? "#0284c7"
       : "#6b7280";
+
+  const screenshotSection = screenshotBase64
+    ? `
+      <h3 style="margin:18px 0 6px;font-size:14px;color:#111827;">Screenshot</h3>
+      <div
+        style="
+          background:#f9fafb;
+          border:1px solid #e5e7eb;
+          border-radius:8px;
+          padding:10px 12px;
+        "
+      >
+        <img
+          src="data:image/png;base64,${screenshotBase64}"
+          alt="Issue screenshot"
+          style="max-width:100%;max-height:480px;border-radius:6px;display:block;"
+        />
+      </div>
+    `
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -257,6 +281,8 @@ function buildHtmlBody({
                   </tr>
                 </table>
 
+                ${screenshotSection}
+
                 <p style="margin:18px 0 0;font-size:11px;color:#9ca3af;">
                   This email was generated automatically by the Golpac IT Support desktop app.
                 </p>
@@ -272,7 +298,7 @@ function buildHtmlBody({
 
 // --- MIDDLEWARE ----------------------------------------------------
 
-// ⭐ Increase JSON body size limit so screenshots can be sent
+// Allow larger JSON payloads so screenshots can be sent
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
@@ -293,7 +319,7 @@ app.post("/api/ticket", async (req, res) => {
       urgency,
       category,
       printerInfo,
-      screenshot,
+      screenshot, // base64 PNG string (no data: prefix)
       appVersion,
       timestamp,
     } = req.body;
@@ -332,6 +358,7 @@ app.post("/api/ticket", async (req, res) => {
     const createdAt = timestamp || new Date().toISOString();
     const resolvedVersion = appVersion || "unknown";
     const safePrinterInfo = printerInfo || "";
+    const hasScreenshot = !!screenshot;
 
     const urgencyTag =
       resolvedUrgency && resolvedUrgency !== "Normal"
@@ -360,6 +387,8 @@ app.post("/api/ticket", async (req, res) => {
       printerInfo: safePrinterInfo,
       resolvedVersion,
       createdAt,
+      screenshotBase64: screenshot,
+      hasScreenshot,
     };
 
     const textBody = buildTextBody(templateData);
@@ -370,7 +399,7 @@ app.post("/api/ticket", async (req, res) => {
     if (screenshot && typeof screenshot === "string") {
       attachments.push({
         filename: "screenshot.png",
-        content: screenshot, // base64 PNG from Tauri
+        content: screenshot,
       });
     }
 
