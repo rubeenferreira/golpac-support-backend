@@ -50,7 +50,7 @@ function buildTextBody({
   resolvedVersion,
   createdAt,
   category,
-  printerInfoLine,
+  printerInfoText,
   hasScreenshot,
 }) {
   return `
@@ -58,7 +58,6 @@ New IT support request from Golpac desktop app
 
 Subject: ${subject}
 Urgency: ${resolvedUrgency}
-Category: ${category || "General"}
 Requester email: ${userEmail || "Not provided"}
 
 Description:
@@ -75,15 +74,15 @@ IPv4: ${ipv4 || "Unknown"}
 -----------------------------
 Category details
 -----------------------------
-${printerInfoLine ? printerInfoLine + "\n" : ""}Screenshot: ${
-    hasScreenshot ? "Included" : "Not provided"
-  }
+Category: ${category || "Not specified"}
+Printer info: ${printerInfoText || "N/A"}
 
 -----------------------------
 Meta
 -----------------------------
 App version: ${resolvedVersion}
 Created at: ${createdAt}
+Screenshot attached: ${hasScreenshot ? "Yes" : "No"}
 `.trim();
 }
 
@@ -107,8 +106,8 @@ function buildHtmlBody({
   resolvedVersion,
   createdAt,
   category,
-  printerInfoLine,
-  screenshotCid,
+  printerInfoText,
+  screenshotDataUrl, // data:image/jpeg;base64,....
 }) {
   const urgencyColor =
     resolvedUrgency === "High"
@@ -117,62 +116,30 @@ function buildHtmlBody({
       ? "#0284c7"
       : "#6b7280";
 
-  const categoryBadge =
-    category && category.toLowerCase() !== "general"
-      ? `<span
-           style="
-             display:inline-block;
-             margin-left:8px;
-             padding:2px 10px;
-             border-radius:999px;
-             font-size:11px;
-             font-weight:600;
-             letter-spacing:0.03em;
-             text-transform:uppercase;
-             color:#374151;
-             background:#e5e7eb;
-           "
-         >
-           ${escapeHtml(category)}
-         </span>`
-      : "";
+  const categoryDisplay = category || "Not specified";
 
-  const printerRow = printerInfoLine
-    ? `<tr>
-         <td style="font-size:13px;color:#6b7280;width:140px;">Printer info</td>
-         <td style="font-size:13px;color:#111827;">
-           ${escapeHtml(printerInfoLine)}
-         </td>
-       </tr>`
-    : "";
+  const printerInfoDisplay = printerInfoText || "N/A";
 
-  const screenshotSection = screenshotCid
-    ? `<div
-         style="
-           margin-top:6px;
-           border-radius:8px;
-           overflow:hidden;
-           border:1px solid #e5e7eb;
-           background:#000;
-         "
-       >
-         <img
-           src="cid:${screenshotCid}"
-           alt="Screenshot"
-           style="display:block;width:100%;max-height:500px;object-fit:contain;background:#000;"
-         />
-       </div>`
-    : `<div
-         style="
-           font-size:13px;
-           color:#9ca3af;
-           border-radius:8px;
-           border:1px dashed #d1d5db;
-           padding:10px 12px;
-         "
-       >
-         No screenshot attached.
-       </div>`;
+  const screenshotBlock = screenshotDataUrl
+    ? `
+      <div style="margin-top:8px;">
+        <img
+          src="${screenshotDataUrl}"
+          alt="Screenshot"
+          style="
+            max-width:100%;
+            border-radius:8px;
+            border:1px solid #e5e7eb;
+            display:block;
+          "
+        />
+      </div>
+    `
+    : `
+      <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">
+        No screenshot attached.
+      </p>
+    `;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -210,10 +177,12 @@ function buildHtmlBody({
 
                 <h2 style="margin:0 0 4px;font-size:18px;color:#111827;">
                   ${escapeHtml(subject)}
+                </h2>
+
+                <div style="margin:0 0 16px;">
                   <span
                     style="
                       display:inline-block;
-                      margin-left:8px;
                       padding:2px 10px;
                       border-radius:999px;
                       font-size:11px;
@@ -226,10 +195,32 @@ function buildHtmlBody({
                   >
                     ${escapeHtml(resolvedUrgency)}
                   </span>
-                  ${categoryBadge}
-                </h2>
 
-                <table cellpadding="0" cellspacing="0" style="width:100%;margin:10px 0 16px;">
+                  ${
+                    categoryDisplay
+                      ? `
+                    <span
+                      style="
+                        display:inline-block;
+                        margin-left:8px;
+                        padding:2px 10px;
+                        border-radius:999px;
+                        font-size:11px;
+                        font-weight:600;
+                        letter-spacing:0.03em;
+                        text-transform:uppercase;
+                        color:#111827;
+                        background:#e5e7eb;
+                      "
+                    >
+                      ${escapeHtml(categoryDisplay)}
+                    </span>
+                  `
+                      : ""
+                  }
+                </div>
+
+                <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:16px;">
                   <tr>
                     <td style="font-size:13px;color:#6b7280;width:140px;">Requester email</td>
                     <td style="font-size:13px;color:#111827;">
@@ -254,13 +245,14 @@ function buildHtmlBody({
                     border-radius:8px;
                     padding:10px 12px;
                     white-space:pre-wrap;
+                    margin-bottom:16px;
                   "
                 >
                   ${escapeHtml(description)}
                 </div>
 
-                <h3 style="margin:18px 0 6px;font-size:14px;color:#111827;">System info</h3>
-                <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;">
+                <h3 style="margin:0 0 6px;font-size:14px;color:#111827;">System info</h3>
+                <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;margin-bottom:16px;">
                   <tr>
                     <td style="padding:4px 0;color:#6b7280;width:130px;">Computer name</td>
                     <td style="padding:4px 0;">${escapeHtml(
@@ -285,19 +277,22 @@ function buildHtmlBody({
                   </tr>
                 </table>
 
-                <h3 style="margin:18px 0 6px;font-size:14px;color:#111827;">Category details</h3>
-                <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;">
+                <h3 style="margin:0 0 6px;font-size:14px;color:#111827;">Category details</h3>
+                <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;margin-bottom:16px;">
                   <tr>
-                    <td style="padding:4px 0;color:#6b7280;width:140px;">Category</td>
+                    <td style="padding:4px 0;color:#6b7280;width:130px;">Category</td>
+                    <td style="padding:4px 0;">${escapeHtml(categoryDisplay)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#6b7280;">Printer info</td>
                     <td style="padding:4px 0;">${escapeHtml(
-                      category || "General"
+                      printerInfoDisplay
                     )}</td>
                   </tr>
-                  ${printerRow}
                 </table>
 
-                <h3 style="margin:18px 0 6px;font-size:14px;color:#111827;">Screenshot</h3>
-                ${screenshotSection}
+                <h3 style="margin:0 0 6px;font-size:14px;color:#111827;">Screenshot</h3>
+                ${screenshotBlock}
 
                 <p style="margin:18px 0 0;font-size:11px;color:#9ca3af;">
                   This email was generated automatically by the Golpac IT Support desktop app.
@@ -314,13 +309,13 @@ function buildHtmlBody({
 
 // --- MIDDLEWARE ----------------------------------------------------
 
-// allow up to ~10MB payload for screenshots
+// allow big-ish screenshots
+app.use(cors());
 app.use(
   express.json({
     limit: "10mb",
   })
 );
-app.use(cors());
 
 // --- ROUTES --------------------------------------------------------
 
@@ -340,24 +335,11 @@ app.post("/api/ticket", async (req, res) => {
       timestamp,
       category,
       printerInfo,
-      screenshot, // base64 string from the app (no data: prefix)
+      screenshotBase64, // base64 string WITHOUT data: prefix
+      screenshotFilename,
     } = req.body;
 
-    console.log("📨 Incoming ticket payload:", {
-      subject,
-      description,
-      userEmail,
-      urgency,
-      hostname,
-      username,
-      osVersion,
-      ipv4,
-      appVersion,
-      timestamp,
-      category,
-      printerInfo: printerInfo || null,
-      hasScreenshot: !!screenshot,
-    });
+    console.log("📨 Incoming ticket payload:", req.body);
 
     if (!subject || !description) {
       return res
@@ -381,7 +363,9 @@ app.post("/api/ticket", async (req, res) => {
     const resolvedUrgency = urgency || "Normal";
     const createdAt = timestamp || new Date().toISOString();
     const resolvedVersion = appVersion || "unknown";
-    const resolvedCategory = category || "General";
+
+    const categoryDisplay = category || "";
+    const printerInfoText = printerInfo || "";
 
     const urgencyTag =
       resolvedUrgency && resolvedUrgency !== "Normal"
@@ -392,57 +376,43 @@ app.post("/api/ticket", async (req, res) => {
       hostname || "Unknown host"
     }`;
 
-    const printerInfoLine =
-      resolvedCategory === "Printers" && printerInfo
-        ? printerInfo
-        : printerInfo || "";
+    const hasScreenshot = !!screenshotBase64;
 
-    // Build attachments (including inline screenshot)
+    // Build data URL for inline display (we know frontend uses JPEG)
+    const screenshotDataUrl = hasScreenshot
+      ? `data:image/jpeg;base64,${screenshotBase64}`
+      : null;
+
+    const templateData = {
+      subject,
+      description,
+      hostname,
+      username,
+      resolvedOs,
+      ipv4,
+      userEmail,
+      resolvedUrgency,
+      resolvedVersion,
+      createdAt,
+      category: categoryDisplay,
+      printerInfoText,
+      hasScreenshot,
+      screenshotDataUrl,
+    };
+
+    const textBody = buildTextBody(templateData);
+    const htmlBody = buildHtmlBody(templateData);
+
+    // Attachments array (include screenshot file if present)
     const attachments = [];
-    let screenshotCid = undefined;
 
-    if (screenshot && typeof screenshot === "string" && screenshot.length > 0) {
-      screenshotCid = "screenshot-inline";
-
+    if (hasScreenshot) {
       attachments.push({
-        filename: "screenshot.png",
-        content: screenshot, // base64 string from client
-        contentType: "image/png",
-        cid: screenshotCid,
+        filename: screenshotFilename || "screenshot.jpg",
+        // Resend accepts base64 string directly
+        content: screenshotBase64,
       });
     }
-
-    const textBody = buildTextBody({
-      subject,
-      description,
-      hostname,
-      username,
-      resolvedOs,
-      ipv4,
-      userEmail,
-      resolvedUrgency,
-      resolvedVersion,
-      createdAt,
-      category: resolvedCategory,
-      printerInfoLine,
-      hasScreenshot: !!screenshotCid,
-    });
-
-    const htmlBody = buildHtmlBody({
-      subject,
-      description,
-      hostname,
-      username,
-      resolvedOs,
-      ipv4,
-      userEmail,
-      resolvedUrgency,
-      resolvedVersion,
-      createdAt,
-      category: resolvedCategory,
-      printerInfoLine,
-      screenshotCid,
-    });
 
     const sendResult = await resend.emails.send({
       from: SUPPORT_EMAIL_FROM,
