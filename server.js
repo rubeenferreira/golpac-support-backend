@@ -291,11 +291,20 @@ app.post("/api/ticket", async (req, res) => {
       urgency,
       category,
       printerInfo,
+      screenshot,
       appVersion,
       timestamp,
     } = req.body;
 
-    console.log("📨 Incoming ticket payload:", req.body);
+    console.log("📨 Incoming ticket payload:", {
+      subject,
+      category,
+      urgency,
+      hostname,
+      username,
+      printerInfo,
+      hasScreenshot: !!screenshot,
+    });
 
     if (!subject || !description) {
       return res
@@ -354,12 +363,22 @@ app.post("/api/ticket", async (req, res) => {
     const textBody = buildTextBody(templateData);
     const htmlBody = buildHtmlBody(templateData);
 
+    const attachments = [];
+
+    if (screenshot && typeof screenshot === "string") {
+      attachments.push({
+        filename: "screenshot.png",
+        content: screenshot, // base64 PNG from Tauri
+      });
+    }
+
     const sendResult = await resend.emails.send({
       from: SUPPORT_EMAIL_FROM,
       to: SUPPORT_EMAIL_TO,
       subject: mailSubject,
       text: textBody,
       html: htmlBody,
+      attachments: attachments.length ? attachments : undefined,
     });
 
     if (sendResult.error) {
