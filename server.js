@@ -119,8 +119,8 @@ function buildHtmlBody({
   const categoryDisplay = category || "Not specified";
   const printerInfoDisplay = printerInfoText || "N/A";
 
-  const screenshotBlock = screenshotDataUrl
-    ? `
+const screenshotBlock = screenshotDataUrl
+  ? `
       <div style="margin-top:8px;">
         <img
           src="${screenshotDataUrl}"
@@ -132,14 +132,16 @@ function buildHtmlBody({
             display:block;
           "
         />
+        <p style="margin-top:6px;font-size:12px;color:#6b7280;">
+          Full-resolution screenshot is attached at the bottom of this email.
+        </p>
       </div>
     `
-    : `
+  : `
       <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">
         No screenshot attached.
       </p>
     `;
-
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
