@@ -78,11 +78,15 @@ Category: ${category || "Not specified"}
 Printer info: ${printerInfoText || "N/A"}
 
 -----------------------------
+Screenshot
+-----------------------------
+${hasScreenshot ? "Screenshot file is attached." : "No screenshot attached."}
+
+-----------------------------
 Meta
 -----------------------------
 App version: ${resolvedVersion}
 Created at: ${createdAt}
-Screenshot attached: ${hasScreenshot ? "Yes" : "No"}
 `.trim();
 }
 
@@ -107,7 +111,7 @@ function buildHtmlBody({
   createdAt,
   category,
   printerInfoText,
-  screenshotDataUrl, // data:image/jpeg;base64,....
+  hasScreenshot,
 }) {
   const urgencyColor =
     resolvedUrgency === "High"
@@ -119,29 +123,10 @@ function buildHtmlBody({
   const categoryDisplay = category || "Not specified";
   const printerInfoDisplay = printerInfoText || "N/A";
 
-const screenshotBlock = screenshotDataUrl
-  ? `
-      <div style="margin-top:8px;">
-        <img
-          src="${screenshotDataUrl}"
-          alt="Screenshot"
-          style="
-            max-width:100%;
-            border-radius:8px;
-            border:1px solid #e5e7eb;
-            display:block;
-          "
-        />
-        <p style="margin-top:6px;font-size:12px;color:#6b7280;">
-          Full-resolution screenshot is attached at the bottom of this email.
-        </p>
-      </div>
-    `
-  : `
-      <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">
-        No screenshot attached.
-      </p>
-    `;
+  const screenshotText = hasScreenshot
+    ? "Screenshot file is attached to this email."
+    : "No screenshot attached.";
+
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -293,7 +278,9 @@ const screenshotBlock = screenshotDataUrl
                 </table>
 
                 <h3 style="margin:0 0 6px;font-size:14px;color:#111827;">Screenshot</h3>
-                ${screenshotBlock}
+                <p style="margin:4px 0 0;font-size:13px;color:#111827;">
+                  ${escapeHtml(screenshotText)}
+                </p>
 
                 <p style="margin:18px 0 0;font-size:11px;color:#9ca3af;">
                   This email was generated automatically by the Golpac IT Support desktop app.
@@ -310,15 +297,14 @@ const screenshotBlock = screenshotDataUrl
 
 // --- MIDDLEWARE ----------------------------------------------------
 
-// allow big-ish screenshots
 app.use(cors());
 app.use(
   express.json({
-    limit: "10mb",
+    limit: "10mb", // still allow decent screenshots
   })
 );
 
-// --- ROUTES --------------------------------------------------------
+// --- ROUTE ---------------------------------------------------------
 
 app.post("/api/ticket", async (req, res) => {
   try {
@@ -336,6 +322,7 @@ app.post("/api/ticket", async (req, res) => {
       timestamp,
       category,
       printerInfo,
+
       // screenshot fields in whatever shape the client sends
       screenshotBase64,
       screenshotDataUrl,
@@ -380,7 +367,7 @@ app.post("/api/ticket", async (req, res) => {
       hostname || "Unknown host"
     }`;
 
-    // ---------- Screenshot extraction (robust) ----------
+    // ---------- Screenshot: extract base64 for attachment ----------
     let base64 = null;
 
     if (screenshotBase64 && typeof screenshotBase64 === "string") {
@@ -397,10 +384,6 @@ app.post("/api/ticket", async (req, res) => {
 
     const hasScreenshot = !!base64;
 
-    const screenshotDataUrlInline = hasScreenshot
-      ? `data:image/jpeg;base64,${base64}`
-      : null;
-
     const templateData = {
       subject,
       description,
@@ -415,19 +398,17 @@ app.post("/api/ticket", async (req, res) => {
       category: categoryDisplay,
       printerInfoText,
       hasScreenshot,
-      screenshotDataUrl: screenshotDataUrlInline,
     };
 
     const textBody = buildTextBody(templateData);
     const htmlBody = buildHtmlBody(templateData);
 
-    // Attachments array (include screenshot file if present)
+    // attachments: only screenshot file
     const attachments = [];
-
     if (hasScreenshot) {
       attachments.push({
         filename: screenshotFilename || "screenshot.jpg",
-        content: base64, // base64 string
+        content: base64,
       });
     }
 
