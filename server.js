@@ -117,7 +117,6 @@ function buildHtmlBody({
       : "#6b7280";
 
   const categoryDisplay = category || "Not specified";
-
   const printerInfoDisplay = printerInfoText || "N/A";
 
   const screenshotBlock = screenshotDataUrl
@@ -335,11 +334,14 @@ app.post("/api/ticket", async (req, res) => {
       timestamp,
       category,
       printerInfo,
-      screenshotBase64, // base64 string WITHOUT data: prefix
+      // screenshot fields in whatever shape the client sends
+      screenshotBase64,
+      screenshotDataUrl,
+      screenshot,
       screenshotFilename,
     } = req.body;
 
-    console.log("📨 Incoming ticket payload:", req.body);
+    console.log("📨 Incoming ticket payload keys:", Object.keys(req.body));
 
     if (!subject || !description) {
       return res
@@ -376,11 +378,25 @@ app.post("/api/ticket", async (req, res) => {
       hostname || "Unknown host"
     }`;
 
-    const hasScreenshot = !!screenshotBase64;
+    // ---------- Screenshot extraction (robust) ----------
+    let base64 = null;
 
-    // Build data URL for inline display (we know frontend uses JPEG)
-    const screenshotDataUrl = hasScreenshot
-      ? `data:image/jpeg;base64,${screenshotBase64}`
+    if (screenshotBase64 && typeof screenshotBase64 === "string") {
+      base64 = screenshotBase64.trim();
+    } else if (screenshotDataUrl && typeof screenshotDataUrl === "string") {
+      const parts = screenshotDataUrl.split(",");
+      base64 = parts.length > 1 ? parts[1] : parts[0];
+    } else if (screenshot && typeof screenshot === "string") {
+      const parts = screenshot.split(",");
+      base64 = parts.length > 1 ? parts[1] : parts[0];
+    }
+
+    if (base64 === "") base64 = null;
+
+    const hasScreenshot = !!base64;
+
+    const screenshotDataUrlInline = hasScreenshot
+      ? `data:image/jpeg;base64,${base64}`
       : null;
 
     const templateData = {
@@ -397,7 +413,7 @@ app.post("/api/ticket", async (req, res) => {
       category: categoryDisplay,
       printerInfoText,
       hasScreenshot,
-      screenshotDataUrl,
+      screenshotDataUrl: screenshotDataUrlInline,
     };
 
     const textBody = buildTextBody(templateData);
@@ -409,8 +425,7 @@ app.post("/api/ticket", async (req, res) => {
     if (hasScreenshot) {
       attachments.push({
         filename: screenshotFilename || "screenshot.jpg",
-        // Resend accepts base64 string directly
-        content: screenshotBase64,
+        content: base64, // base64 string
       });
     }
 
@@ -430,7 +445,12 @@ app.post("/api/ticket", async (req, res) => {
         .json({ ok: false, error: "Failed to send email via Resend" });
     }
 
-    console.log("✅ Ticket email sent via Resend:", mailSubject);
+    console.log(
+      "✅ Ticket email sent via Resend:",
+      mailSubject,
+      "screenshot:",
+      hasScreenshot ? "yes" : "no"
+    );
     res.json({ ok: true });
   } catch (err) {
     console.error("❌ Error sending ticket email:", err);
