@@ -328,6 +328,7 @@ app.post("/api/ticket", async (req, res) => {
       screenshotDataUrl,
       screenshot,
       screenshotFilename,
+      screenshots: screenshotArray,
     } = req.body;
 
     console.log("📨 Incoming ticket payload keys:", Object.keys(req.body));
@@ -368,21 +369,44 @@ app.post("/api/ticket", async (req, res) => {
     }`;
 
     // ---------- Screenshot: extract base64 for attachment ----------
-    let base64 = null;
+    const attachments = [];
 
-    if (screenshotBase64 && typeof screenshotBase64 === "string") {
-      base64 = screenshotBase64.trim();
-    } else if (screenshotDataUrl && typeof screenshotDataUrl === "string") {
-      const parts = screenshotDataUrl.split(",");
-      base64 = parts.length > 1 ? parts[1] : parts[0];
-    } else if (screenshot && typeof screenshot === "string") {
-      const parts = screenshot.split(",");
-      base64 = parts.length > 1 ? parts[1] : parts[0];
+    const extractBase64 = (value) => {
+      if (!value || typeof value !== "string") return null;
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const parts = trimmed.split(",");
+      return parts.length > 1 ? parts[1] : parts[0];
+    };
+
+    if (Array.isArray(screenshotArray)) {
+      screenshotArray.forEach((value, index) => {
+        const base64 = extractBase64(value);
+        if (base64) {
+          attachments.push({
+            filename:
+              screenshotFilename || `screenshot-${index + 1}.png`,
+            content: base64,
+          });
+        }
+      });
     }
 
-    if (base64 === "") base64 = null;
+    if (attachments.length === 0) {
+      const singleBase64 =
+        extractBase64(screenshotBase64) ||
+        extractBase64(screenshotDataUrl) ||
+        extractBase64(screenshot);
 
-    const hasScreenshot = !!base64;
+      if (singleBase64) {
+        attachments.push({
+          filename: screenshotFilename || "screenshot-1.png",
+          content: singleBase64,
+        });
+      }
+    }
+
+    const hasScreenshot = attachments.length > 0;
 
     const templateData = {
       subject,
@@ -404,14 +428,6 @@ app.post("/api/ticket", async (req, res) => {
     const htmlBody = buildHtmlBody(templateData);
 
     // attachments: only screenshot file
-    const attachments = [];
-    if (hasScreenshot) {
-      attachments.push({
-        filename: screenshotFilename || "screenshot.jpg",
-        content: base64,
-      });
-    }
-
     const sendResult = await resend.emails.send({
       from: SUPPORT_EMAIL_FROM,
       to: SUPPORT_EMAIL_TO,
