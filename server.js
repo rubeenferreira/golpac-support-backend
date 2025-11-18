@@ -444,7 +444,7 @@ function formatNumber(num) {
 app.use(cors());
 app.use(
   express.json({
-    limit: "10mb", // still allow decent screenshots
+    limit: "25mb",
   })
 );
 
