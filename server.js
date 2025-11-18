@@ -52,6 +52,8 @@ function buildTextBody({
   category,
   printerInfoText,
   hasScreenshot,
+  systemMetricsText,
+  appContextText,
 }) {
   return `
 New IT support request from Golpac desktop app
@@ -76,6 +78,16 @@ Category details
 -----------------------------
 Category: ${category || "Not specified"}
 Printer info: ${printerInfoText || "N/A"}
+
+-----------------------------
+System metrics
+-----------------------------
+${systemMetricsText || "Unavailable"}
+
+-----------------------------
+App context
+-----------------------------
+${appContextText || "N/A"}
 
 -----------------------------
 Screenshot
@@ -112,6 +124,8 @@ function buildHtmlBody({
   category,
   printerInfoText,
   hasScreenshot,
+  systemMetricsHtml,
+  appContextHtml,
 }) {
   const urgencyColor =
     resolvedUrgency === "High"
@@ -282,6 +296,24 @@ function buildHtmlBody({
                   ${escapeHtml(screenshotText)}
                 </p>
 
+                ${
+                  systemMetricsHtml
+                    ? `
+                <h3 style="margin:16px 0 6px;font-size:14px;color:#111827;">System metrics</h3>
+                ${systemMetricsHtml}
+                `
+                    : ""
+                }
+
+                ${
+                  appContextHtml
+                    ? `
+                <h3 style="margin:16px 0 6px;font-size:14px;color:#111827;">App context</h3>
+                ${appContextHtml}
+                `
+                    : ""
+                }
+
                 <p style="margin:18px 0 0;font-size:11px;color:#9ca3af;">
                   This email was generated automatically by the Golpac IT Support desktop app.
                 </p>
@@ -293,6 +325,118 @@ function buildHtmlBody({
     </table>
   </body>
 </html>`;
+}
+
+function formatSystemMetricsText(metrics) {
+  if (!metrics) return null;
+  const parts = [
+    `Uptime: ${metrics.uptime_human} (${metrics.uptime_seconds || 0}s)`,
+    `Disk C: ${formatNumber(metrics.free_disk_c_gb)} GB free of ${formatNumber(
+      metrics.total_disk_c_gb
+    )} GB`,
+    `CPU usage: ${formatNumber(metrics.cpu_usage_percent)}%`,
+    `Memory usage: ${formatNumber(metrics.memory_used_gb)} GB of ${formatNumber(
+      metrics.memory_total_gb
+    )} GB`,
+    `Default gateway: ${metrics.default_gateway || "Unknown"}`,
+    `Gateway ping: ${
+      metrics.gateway_ping_ms != null
+        ? `${formatNumber(metrics.gateway_ping_ms)} ms`
+        : "No response"
+    }`,
+    `Public IP: ${metrics.public_ip || "Unknown"}`,
+    `Captured at: ${metrics.timestamp || "Unknown"}`
+  ];
+  return parts.join("\n");
+}
+
+function formatSystemMetricsHtml(metrics) {
+  if (!metrics) return "";
+  const rows = [
+    ["Uptime", `${escapeHtml(metrics.uptime_human || "")} (${metrics.uptime_seconds || 0}s)`],
+    [
+      "Disk C:",
+      `${formatNumber(metrics.free_disk_c_gb)} GB free of ${formatNumber(metrics.total_disk_c_gb)} GB`,
+    ],
+    ["CPU usage", `${formatNumber(metrics.cpu_usage_percent)}%`],
+    [
+      "Memory usage",
+      `${formatNumber(metrics.memory_used_gb)} GB of ${formatNumber(metrics.memory_total_gb)} GB`,
+    ],
+    ["Default gateway", escapeHtml(metrics.default_gateway || "Unknown")],
+    [
+      "Gateway ping",
+      metrics.gateway_ping_ms != null
+        ? `${formatNumber(metrics.gateway_ping_ms)} ms`
+        : "No response",
+    ],
+    ["Public IP", escapeHtml(metrics.public_ip || "Unknown")],
+    ["Captured at", escapeHtml(metrics.timestamp || "Unknown")],
+  ];
+
+  const rowsHtml = rows
+    .map(
+      ([label, value]) => `
+        <tr>
+          <td style="padding:4px 0;color:#6b7280;width:150px;">${label}</td>
+          <td style="padding:4px 0;">${value}</td>
+        </tr>`
+    )
+    .join("");
+
+  return `
+    <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;margin-bottom:16px;">
+      ${rowsHtml}
+    </table>
+  `;
+}
+
+function formatAppContextText(value) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      const obj = JSON.parse(value);
+      if (obj && typeof obj === "object") {
+        return Object.entries(obj)
+          .map(([k, v]) => `${k}: ${v ?? ""}`)
+          .join("\n");
+      }
+    } catch {
+      // ignore
+    }
+    return value;
+  }
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([k, v]) => `${k}: ${v ?? ""}`)
+      .join("\n");
+  }
+  return null;
+}
+
+function formatAppContextHtml(value) {
+  const text = formatAppContextText(value);
+  if (!text) return "";
+  return `
+    <div
+      style="
+        font-size:13px;
+        color:#111827;
+        background:#f9fafb;
+        border:1px solid #e5e7eb;
+        border-radius:8px;
+        padding:10px 12px;
+        white-space:pre-wrap;
+      "
+    >
+      ${escapeHtml(text)}
+    </div>
+  `;
+}
+
+function formatNumber(num) {
+  if (num == null || Number.isNaN(num)) return "0";
+  return Number(num).toFixed(2);
 }
 
 // --- MIDDLEWARE ----------------------------------------------------
@@ -329,6 +473,8 @@ app.post("/api/ticket", async (req, res) => {
       screenshot,
       screenshotFilename,
       screenshots: screenshotArray,
+      systemMetrics,
+      appContext,
     } = req.body;
 
     console.log("📨 Incoming ticket payload keys:", Object.keys(req.body));
@@ -407,6 +553,10 @@ app.post("/api/ticket", async (req, res) => {
     }
 
     const hasScreenshot = attachments.length > 0;
+    const systemMetricsText = formatSystemMetricsText(systemMetrics);
+    const systemMetricsHtml = formatSystemMetricsHtml(systemMetrics);
+    const appContextText = formatAppContextText(appContext);
+    const appContextHtml = formatAppContextHtml(appContext);
 
     const templateData = {
       subject,
@@ -422,10 +572,16 @@ app.post("/api/ticket", async (req, res) => {
       category: categoryDisplay,
       printerInfoText,
       hasScreenshot,
+      systemMetricsText,
+      appContextText,
     };
 
     const textBody = buildTextBody(templateData);
-    const htmlBody = buildHtmlBody(templateData);
+    const htmlBody = buildHtmlBody({
+      ...templateData,
+      systemMetricsHtml,
+      appContextHtml,
+    });
 
     // attachments: only screenshot file
     const sendResult = await resend.emails.send({
