@@ -350,19 +350,26 @@ function formatSystemMetricsText(metrics) {
     `Disk C: ${formatNumber(metrics.free_disk_c_gb)} GB free of ${formatNumber(
       metrics.total_disk_c_gb
     )} GB`,
+    `CPU: ${metrics.cpu_brand || "Unknown processor"}`,
     `CPU usage: ${formatNumber(metrics.cpu_usage_percent)}%`,
     `Memory usage: ${formatNumber(metrics.memory_used_gb)} GB of ${formatNumber(
       metrics.memory_total_gb
     )} GB`,
     `Default gateway: ${metrics.default_gateway || "Unknown"}`,
-    `Gateway ping: ${
-      metrics.gateway_ping_ms != null
-        ? `${formatNumber(metrics.gateway_ping_ms)} ms`
-        : "No response"
-    }`,
     `Public IP: ${metrics.public_ip || "Unknown"}`,
     `Captured at: ${metrics.timestamp || "Unknown"}`
   ];
+
+  if (Array.isArray(metrics.disks) && metrics.disks.length) {
+    parts.push("Storage details:");
+    metrics.disks.forEach((disk) => {
+      parts.push(
+        ` - ${disk.name || disk.mount}: ${formatNumber(disk.free_gb)} GB free of ${formatNumber(
+          disk.total_gb
+        )} GB`
+      );
+    });
+  }
   return parts.join("\n");
 }
 
@@ -374,18 +381,13 @@ function formatSystemMetricsHtml(metrics) {
       "Disk C:",
       `${formatNumber(metrics.free_disk_c_gb)} GB free of ${formatNumber(metrics.total_disk_c_gb)} GB`,
     ],
+    ["CPU", escapeHtml(metrics.cpu_brand || "Unknown processor")],
     ["CPU usage", `${formatNumber(metrics.cpu_usage_percent)}%`],
     [
       "Memory usage",
       `${formatNumber(metrics.memory_used_gb)} GB of ${formatNumber(metrics.memory_total_gb)} GB`,
     ],
     ["Default gateway", escapeHtml(metrics.default_gateway || "Unknown")],
-    [
-      "Gateway ping",
-      metrics.gateway_ping_ms != null
-        ? `${formatNumber(metrics.gateway_ping_ms)} ms`
-        : "No response",
-    ],
     ["Public IP", escapeHtml(metrics.public_ip || "Unknown")],
     ["Captured at", escapeHtml(metrics.timestamp || "Unknown")],
   ];
@@ -400,9 +402,37 @@ function formatSystemMetricsHtml(metrics) {
     )
     .join("");
 
+  let disksHtml = "";
+  if (Array.isArray(metrics.disks) && metrics.disks.length) {
+    const diskList = metrics.disks
+      .map(
+        (disk) => `
+        <li style="margin:0 0 6px;">
+          <strong>${escapeHtml(disk.name || disk.mount)}</strong>
+          <span style="color:#6b7280;margin-left:6px;">(${escapeHtml(disk.mount || "")})</span>
+          <div style="font-size:12px;color:#111827;">
+            ${formatNumber(disk.free_gb)} GB free of ${formatNumber(disk.total_gb)} GB
+          </div>
+        </li>`
+      )
+      .join("");
+
+    disksHtml = `
+      <tr>
+        <td style="padding:4px 0;color:#6b7280;width:150px;vertical-align:top;">Drives</td>
+        <td style="padding:4px 0;">
+          <ul style="padding-left:16px;margin:0;list-style:disc;">
+            ${diskList}
+          </ul>
+        </td>
+      </tr>
+    `;
+  }
+
   return `
     <table cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;margin-bottom:16px;">
       ${rowsHtml}
+      ${disksHtml}
     </table>
   `;
 }
