@@ -78,7 +78,7 @@ IPv4: ${ipv4 || "Unknown"}
 Category details
 -----------------------------
 Category: ${category || "Not specified"}
-Printer info: ${printerInfoText || "N/A"}
+Info: ${printerInfoText || "N/A"}
 
 -----------------------------
 Network status
@@ -291,7 +291,7 @@ function buildHtmlBody({
                     <td style="padding:4px 0;">${escapeHtml(categoryDisplay)}</td>
                   </tr>
                   <tr>
-                    <td style="padding:4px 0;color:#6b7280;">Printer info</td>
+                    <td style="padding:4px 0;color:#6b7280;">Info</td>
                     <td style="padding:4px 0;">${escapeHtml(
                       printerInfoDisplay
                     )}</td>
